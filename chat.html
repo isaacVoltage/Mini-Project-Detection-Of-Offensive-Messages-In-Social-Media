@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ChatRoom</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .chat-container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            background: white;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+
+        .message.offensive {
+            border-left: 4px solid #dc3545;
+        }
+
+        .message-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .warning-message {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 5px solid #ffeeba;
+        }
+
+        .system-message {
+            text-align: center;
+            color: #0c5460;
+            background-color: #d1ecf1;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="header">
+            <h2>Chat Room</h2>
+            <div>
+                <span id="username-display"></span>
+                <button onclick="logout()" class="btn">Logout</button>
+            </div>
+        </div>
+        <div id="messages" class="messages"></div>
+        <form id="messageForm" class="message-form">
+            <input 
+                type="text" 
+                id="messageInput" 
+                class="message-input" 
+                placeholder="Type a message..." 
+                autocomplete="off"
+                required
+            >
+            <button type="submit" class="btn">Send</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const messages = document.getElementById('messages');
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+        const usernameDisplay = document.getElementById('username-display');
+
+        // Get user info from session storage
+        const username = sessionStorage.getItem('username');
+        const userId = sessionStorage.getItem('userId');
+
+        if (!username || !userId) {
+            window.location.href = '/login.html';
+        }
+
+        usernameDisplay.textContent = `Logged in as: ${username}`;
+
+        // Join chat room
+        socket.emit('join', username);
+
+        // Load message history
+        socket.on('load_messages', (messageHistory) => {
+            messages.innerHTML = '';
+            messageHistory.forEach(message => {
+                appendMessage(message);
+            });
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Handle new messages
+        socket.on('new_message', (data) => {
+            appendMessage(data.message, data.isOffensive);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Handle message deletion
+        socket.on('message_deleted', (messageId) => {
+            const messageElement = document.getElementById(`message-${messageId}`);
+            if (messageElement) {
+                messageElement.remove();
+            }
+        });
+
+        // Handle warnings
+        socket.on('warning_message', (data) => {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'warning-message';
+            warningDiv.textContent = data.message;
+            messages.appendChild(warningDiv);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Handle user banned
+        socket.on('you_are_banned', (data) => {
+            alert(data.message);
+            sessionStorage.clear();
+            window.location.href = '/';
+        });
+
+        // Handle system messages
+        socket.on('system_message', (data) => {
+            const systemMessage = document.createElement('div');
+            systemMessage.className = 'system-message';
+            systemMessage.textContent = data.message;
+            messages.appendChild(systemMessage);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Send message
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            
+            if (message) {
+                socket.emit('send_message', {
+                    message: message,
+                    userId: userId
+                });
+                messageInput.value = '';
+            }
+        });
+
+        // Append message to chat
+        function appendMessage(message, isOffensive = false) {
+            const messageElement = document.createElement('div');
+            messageElement.id = `message-${message._id}`;
+            messageElement.className = `message ${isOffensive ? 'offensive' : ''}`;
+            messageElement.innerHTML = `
+                <strong>${message.username}</strong>: ${message.content}
+                <div><small>${new Date(message.timestamp).toLocaleString()}</small></div>
+            `;
+            messages.appendChild(messageElement);
+        }
+
+        // Logout function
+        function logout() {
+            fetch('/logout', {
+                method: 'POST'
+            }).then(() => {
+                sessionStorage.clear();
+                window.location.href = '/';
+            }).catch(error => {
+                console.error('Logout error:', error);
+                window.location.href = '/';
+            });
+        }
+
+        // Keep connection alive
+        setInterval(() => {
+            socket.emit('keepalive');
+        }, 30000);
+
+        // Handle disconnection
+        socket.on('disconnect', () => {
+            appendSystemMessage('Disconnected from server. Attempting to reconnect...');
+        });
+
+        socket.on('connect', () => {
+            if (messages.contains(document.querySelector('.disconnect-message'))) {
+                appendSystemMessage('Reconnected to server!');
+                socket.emit('join', username); // Rejoin the chat
+            }
+        });
+
+        function appendSystemMessage(text) {
+            const systemMessage = document.createElement('div');
+            systemMessage.className = 'system-message';
+            systemMessage.textContent = text;
+            messages.appendChild(systemMessage);
+            messages.scrollTop = messages.scrollHeight;
+        }
+    </script>
+</body>
+</html>

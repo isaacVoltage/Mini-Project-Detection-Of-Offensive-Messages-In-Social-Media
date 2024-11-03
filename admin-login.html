@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Login - ChatRoom</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Admin Login</h2>
+        <form id="adminLoginForm">
+            <input type="text" id="username" placeholder="Admin Username" required>
+            <input type="password" id="password" placeholder="Admin Password" required>
+            <button type="submit" class="btn admin">Login as Admin</button>
+        </form>
+        <p><a href="/login.html">Back to User Login</a></p>
+        <div id="errorMessage" style="color: red; margin-top: 10px;"></div>
+    </div>
+    <script>
+        document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+
+            try {
+                const response = await fetch('/admin/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+                console.log('Login response:', data); // Debug log
+
+                if (data.success) {
+                    sessionStorage.setItem('username', username);
+                    sessionStorage.setItem('userId', data.userId);
+                    sessionStorage.setItem('isAdmin', 'true');
+                    window.location.href = '/admin-dashboard.html';
+                } else {
+                    errorDiv.textContent = data.error || 'Invalid admin credentials';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorDiv.textContent = 'An error occurred during login';
+            }
+        });
+    </script>
+</body>
+</html>
